@@ -1,0 +1,24 @@
+===========================================================================
+ AI4I 2020 DATASET INTEGRITY & FAILURE DISTRIBUTION AUDIT
+===========================================================================
+
+Total Operational Records : 10,000
+Total Columns             : 14
+Missing Values Checked    : 0
+Duplicate Rows Checked    : 0
+Normal Machine Operations : 9,661 (96.61%)
+Machine Failure Incidents : 339 (3.39%)
+Class Imbalance Ratio     : 1 failure per 28.5 normal operations
+
+AUDIT OF FAILURE INDICATOR FLAGS:
+--------------------------------------------------
+TWF (Tool Wear Failure): Total Flagged=46 | In Failures=46 | In Normal=0
+HDF (Heat Dissipation Failure): Total Flagged=115 | In Failures=115 | In Normal=0
+PWF (Power Failure): Total Flagged=95 | In Failures=95 | In Normal=0
+OSF (Overstrain Failure): Total Flagged=98 | In Failures=98 | In Normal=0
+RNF (Random Failure): Total Flagged=19 | In Failures=1 | In Normal=18
+
+KEY INTEGRITY FINDING: RNF (Random Failure) Artifact:
+18 out of 19 RNF instances in the dataset have Machine failure == 0.
+In genuine failures, RNF occurred in only 1 instance (co-occurring with TWF).
+Normal operating records were verified and excluded from failure-type training.

@@ -1,0 +1,60 @@
+================================================================================
+ INDUSTRIAL PREDICTIVE MAINTENANCE: ML MODEL AUDIT & EVALUATION REPORT
+================================================================================
+
+1. DATASET CHARACTERISTICS
+--------------------------------------------------
+Total Rows: 10000 | Normal (0): 9661 | Failures (1): 339
+Imbalance Ratio: 1 : 28.5
+
+2. DATA LEAKAGE CONTROLS
+--------------------------------------------------
+Excluded from Inputs: UDI, Product ID, Machine failure, TWF, HDF, PWF, OSF, RNF
+Input Features: Type, Air temp, Process temp, Speed, Torque, Tool wear
+Domain Features: Temp_diff, Power_kW, Tool_wear_Torque
+Transformations fitted strictly within training folds.
+
+3. STRATIFIED 5-FOLD CROSS-VALIDATION (TRAINING SET ONLY)
+--------------------------------------------------
+                            Model  CV_Recall  CV_Recall_Std  CV_Precision  CV_Precision_Std    CV_F1  CV_F1_Std  CV_ROC_AUC  CV_PR_AUC  CV_Brier
+         Random Forest (Balanced)   0.830236       0.035992      0.818004          0.045902 0.823075   0.030530    0.980921   0.889403  0.011482
+           Extra Trees (Balanced)   0.741751       0.015525      0.726940          0.029072 0.733825   0.015222    0.968180   0.796540  0.023939
+Hist Gradient Boosting (Balanced)   0.822761       0.025770      0.948156          0.042348 0.879926   0.013886    0.974050   0.887546  0.007335
+   Logistic Regression (Balanced)   0.841481       0.045566      0.162068          0.007535 0.271600   0.010715    0.923342   0.458743  0.109374
+
+4. DECISION THRESHOLD SELECTION
+--------------------------------------------------
+Selected Production Model: Hist Gradient Boosting (Balanced)
+Selected Optimal Decision Threshold: 0.67
+
+5. HELD-OUT TEST PARTITION EVALUATION (UNTOUCHED UNTIL FINAL TEST)
+--------------------------------------------------
+                                                  Model  Threshold  Accuracy  Precision   Recall  F1_Score  ROC_AUC   PR_AUC  TP  FP  FN   TN
+                               Random Forest (Balanced)       0.50    0.9855   0.760000 0.838235  0.797203 0.984244 0.871078  57  18  11 1914
+                                 Extra Trees (Balanced)       0.50    0.9795   0.684932 0.735294  0.709220 0.967323 0.764141  50  23  18 1909
+                      Hist Gradient Boosting (Balanced)       0.50    0.9925   0.934426 0.838235  0.883721 0.976297 0.902444  57   4  11 1928
+Hist Gradient Boosting (Balanced) [Optimized Threshold]       0.67    0.9935   0.966102 0.838235  0.897638 0.976297 0.902444  57   2  11 1930
+                         Logistic Regression (Balanced)       0.50    0.8590   0.179641 0.882353  0.298507 0.938474 0.429605  60 274   8 1658
+
+6. AUDITED FAILURE TYPE DIAGNOSTIC MODEL
+--------------------------------------------------
+Diagnostic Test Accuracy: 97.59%
+Sample Counts among Genuine Failures:
+  - Heat Dissipation Failure: 115
+  - Power Failure: 92
+  - Overstrain Failure: 80
+  - Tool Wear Failure: 43
+  - Unclassified Failure: 9
+
+Diagnostic Classification Report:
+                          precision    recall  f1-score   support
+
+Heat Dissipation Failure     0.9667    1.0000    0.9831        29
+      Overstrain Failure     1.0000    0.9000    0.9474        20
+           Power Failure     1.0000    1.0000    1.0000        23
+       Tool Wear Failure     0.9167    1.0000    0.9565        11
+
+                accuracy                         0.9759        83
+               macro avg     0.9708    0.9750    0.9717        83
+            weighted avg     0.9773    0.9759    0.9756        83
+

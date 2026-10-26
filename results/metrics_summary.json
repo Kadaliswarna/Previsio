@@ -1,0 +1,127 @@
+{
+  "selected_model": "Hist Gradient Boosting (Balanced)",
+  "selected_threshold": 0.6699999999999999,
+  "cv_metrics": [
+    {
+      "Model": "Random Forest (Balanced)",
+      "CV_Recall": 0.8302356902356902,
+      "CV_Recall_Std": 0.035991612375516416,
+      "CV_Precision": 0.8180038477473335,
+      "CV_Precision_Std": 0.04590169107111632,
+      "CV_F1": 0.8230745417851999,
+      "CV_F1_Std": 0.030530379174912664,
+      "CV_ROC_AUC": 0.9809207851551263,
+      "CV_PR_AUC": 0.8894029744413953,
+      "CV_Brier": 0.011481904812125718
+    },
+    {
+      "Model": "Extra Trees (Balanced)",
+      "CV_Recall": 0.7417508417508418,
+      "CV_Recall_Std": 0.015524770213331337,
+      "CV_Precision": 0.7269395004778328,
+      "CV_Precision_Std": 0.029072323934516222,
+      "CV_F1": 0.7338253577240345,
+      "CV_F1_Std": 0.015221729727729713,
+      "CV_ROC_AUC": 0.9681800302053005,
+      "CV_PR_AUC": 0.7965403321852225,
+      "CV_Brier": 0.02393913981411512
+    },
+    {
+      "Model": "Hist Gradient Boosting (Balanced)",
+      "CV_Recall": 0.8227609427609428,
+      "CV_Recall_Std": 0.025769874487272887,
+      "CV_Precision": 0.9481561996779388,
+      "CV_Precision_Std": 0.04234789638240507,
+      "CV_F1": 0.8799261824491683,
+      "CV_F1_Std": 0.013885571238535744,
+      "CV_ROC_AUC": 0.9740496322490069,
+      "CV_PR_AUC": 0.887546384542134,
+      "CV_Brier": 0.0073354897201119455
+    },
+    {
+      "Model": "Logistic Regression (Balanced)",
+      "CV_Recall": 0.8414814814814815,
+      "CV_Recall_Std": 0.04556609333105096,
+      "CV_Precision": 0.16206826680330985,
+      "CV_Precision_Std": 0.007534585484496284,
+      "CV_F1": 0.2716000980250291,
+      "CV_F1_Std": 0.010715180879750187,
+      "CV_ROC_AUC": 0.9233415471993449,
+      "CV_PR_AUC": 0.4587434673850203,
+      "CV_Brier": 0.10937396309611613
+    }
+  ],
+  "test_metrics": [
+    {
+      "Model": "Random Forest (Balanced)",
+      "Threshold": 0.5,
+      "Accuracy": 0.9855,
+      "Precision": 0.76,
+      "Recall": 0.8382352941176471,
+      "F1_Score": 0.7972027972027972,
+      "ROC_AUC": 0.9842436974789917,
+      "PR_AUC": 0.8710776948618774,
+      "TP": 57,
+      "FP": 18,
+      "FN": 11,
+      "TN": 1914
+    },
+    {
+      "Model": "Extra Trees (Balanced)",
+      "Threshold": 0.5,
+      "Accuracy": 0.9795,
+      "Precision": 0.684931506849315,
+      "Recall": 0.7352941176470589,
+      "F1_Score": 0.7092198581560284,
+      "ROC_AUC": 0.9673227986846912,
+      "PR_AUC": 0.7641405556791874,
+      "TP": 50,
+      "FP": 23,
+      "FN": 18,
+      "TN": 1909
+    },
+    {
+      "Model": "Hist Gradient Boosting (Balanced)",
+      "Threshold": 0.5,
+      "Accuracy": 0.9925,
+      "Precision": 0.9344262295081968,
+      "Recall": 0.8382352941176471,
+      "F1_Score": 0.8837209302325582,
+      "ROC_AUC": 0.9762970405553526,
+      "PR_AUC": 0.902444385535044,
+      "TP": 57,
+      "FP": 4,
+      "FN": 11,
+      "TN": 1928
+    },
+    {
+      "Model": "Hist Gradient Boosting (Balanced) [Optimized Threshold]",
+      "Threshold": 0.6699999999999999,
+      "Accuracy": 0.9935,
+      "Precision": 0.9661016949152542,
+      "Recall": 0.8382352941176471,
+      "F1_Score": 0.8976377952755905,
+      "ROC_AUC": 0.9762970405553526,
+      "PR_AUC": 0.902444385535044,
+      "TP": 57,
+      "FP": 2,
+      "FN": 11,
+      "TN": 1930
+    },
+    {
+      "Model": "Logistic Regression (Balanced)",
+      "Threshold": 0.5,
+      "Accuracy": 0.859,
+      "Precision": 0.17964071856287425,
+      "Recall": 0.8823529411764706,
+      "F1_Score": 0.29850746268656714,
+      "ROC_AUC": 0.9384743027645841,
+      "PR_AUC": 0.4296051809355886,
+      "TP": 60,
+      "FP": 274,
+      "FN": 8,
+      "TN": 1658
+    }
+  ],
+  "diagnostic_accuracy": 0.9759036144578314
+}
