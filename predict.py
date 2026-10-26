@@ -81,8 +81,13 @@ def engineer_features(df):
 def validate_sensor_inputs(machine_type, air_temp, process_temp, speed, torque, tool_wear):
     """
     Validates sensor values against realistic physical ranges.
+    Guards against missing, null, NaN, infinite, and out-of-bounds readings.
     Raises ValueError with a helpful explanation if values are invalid.
     """
+    raw_vals = [machine_type, air_temp, process_temp, speed, torque, tool_wear]
+    if any(v is None or (isinstance(v, str) and not v.strip()) for v in raw_vals):
+        raise ValueError("All 6 telemetry parameters are required and cannot be empty.")
+
     machine_type = str(machine_type).strip().upper()
     if machine_type not in ["L", "M", "H"]:
         raise ValueError(
@@ -90,36 +95,41 @@ def validate_sensor_inputs(machine_type, air_temp, process_temp, speed, torque, 
         )
 
     try:
-        air_temp = float(air_temp)
-        process_temp = float(process_temp)
-        speed = float(speed)
-        torque = float(torque)
-        tool_wear = float(tool_wear)
+        air_val = float(air_temp)
+        proc_val = float(process_temp)
+        speed_val = float(speed)
+        torque_val = float(torque)
+        wear_val = float(tool_wear)
     except (ValueError, TypeError) as e:
         raise ValueError(f"All numerical sensor readings must be valid numbers. Error detail: {e}")
 
+    numeric_vals = [("Air Temperature", air_val), ("Process Temperature", proc_val),
+                    ("Rotational Speed", speed_val), ("Torque", torque_val), ("Tool Wear", wear_val)]
+    for name, val in numeric_vals:
+        if np.isnan(val):
+            raise ValueError(f"Telemetry reading '{name}' cannot be NaN (Not a Number).")
+        if np.isinf(val):
+            raise ValueError(f"Telemetry reading '{name}' cannot be Infinite (+Inf / -Inf).")
+
     # Physical bounds checks
-    if air_temp < 250.0 or air_temp > 350.0:
-        raise ValueError(f"Air temperature {air_temp} K is outside realistic ambient factory limits (250 K - 350 K / -23 C to +77 C).")
-    if process_temp < 250.0 or process_temp > 370.0:
-        raise ValueError(f"Process temperature {process_temp} K is outside realistic milling chamber limits (250 K - 370 K).")
-    if process_temp < air_temp:
-        # Physical constraint: cutting process generates friction heat; process temp should typically exceed ambient
-        pass  # allowed with warning if chilled, but physically noteworthy
-    if speed <= 0 or speed > 6000:
-        raise ValueError(f"Rotational speed {speed} rpm must be positive and within spindle limits (1 - 6,000 rpm).")
-    if torque < 0 or torque > 300:
-        raise ValueError(f"Torque {torque} Nm must be non-negative and within spindle limits (0 - 300 Nm).")
-    if tool_wear < 0 or tool_wear > 600:
-        raise ValueError(f"Tool wear {tool_wear} min must be non-negative (0 - 600 min).")
+    if air_val < 250.0 or air_val > 350.0:
+        raise ValueError(f"Air temperature {air_val:.1f} K is outside realistic ambient factory limits (250 K - 350 K / -23 C to +77 C).")
+    if proc_val < 250.0 or proc_val > 370.0:
+        raise ValueError(f"Process temperature {proc_val:.1f} K is outside realistic milling chamber limits (250 K - 370 K).")
+    if speed_val <= 0 or speed_val > 6000:
+        raise ValueError(f"Rotational speed {speed_val:.0f} rpm must be positive and within spindle limits (1 - 6,000 rpm).")
+    if torque_val < 0 or torque_val > 300:
+        raise ValueError(f"Torque {torque_val:.1f} Nm must be non-negative and within spindle limits (0 - 300 Nm).")
+    if wear_val < 0 or wear_val > 600:
+        raise ValueError(f"Tool wear {wear_val:.0f} min must be non-negative (0 - 600 min).")
 
     return {
         "Type": machine_type,
-        "Air temperature [K]": air_temp,
-        "Process temperature [K]": process_temp,
-        "Rotational speed [rpm]": speed,
-        "Torque [Nm]": torque,
-        "Tool wear [min]": tool_wear
+        "Air temperature [K]": air_val,
+        "Process temperature [K]": proc_val,
+        "Rotational speed [rpm]": speed_val,
+        "Torque [Nm]": torque_val,
+        "Tool wear [min]": wear_val
     }
 
 
@@ -271,18 +281,28 @@ def print_prediction_report(res):
     print("=" * 72 + "\n")
 
 
-def run_batch_prediction(csv_path, binary_pipeline, type_pipeline, threshold=0.50, output_csv=None):
+def run_batch_prediction(csv_path, binary_pipeline, type_pipeline, threshold=0.67, output_csv=None):
     """
     Executes batch prediction on a CSV file and saves summary results.
+    Validates input data strictly for missing files, empty files, NaNs, infinities,
+    and out-of-range sensor readings.
     """
+    import utils
+
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"Batch CSV file not found at: {csv_path}")
+
     print(f"\nLoading batch sensor data from: {csv_path}")
-    df_batch = pd.read_csv(csv_path)
+    try:
+        df_raw = pd.read_csv(csv_path)
+    except Exception as e:
+        raise ValueError(f"Failed to read CSV file: {e}")
+
+    is_valid, err_msg, df_batch = utils.validate_telemetry_dataframe(df_raw)
+    if not is_valid:
+        raise ValueError(err_msg)
 
     required_cols = ["Type", "Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]"]
-    missing = [c for c in required_cols if c not in df_batch.columns]
-    if missing:
-        raise ValueError(f"Batch CSV is missing required sensor columns: {missing}")
-
     df_feat = engineer_features(df_batch[required_cols])
     probas = binary_pipeline.predict_proba(df_feat)[:, 1]
     preds = (probas >= threshold).astype(int)

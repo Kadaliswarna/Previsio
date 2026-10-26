@@ -21,7 +21,7 @@ import utils
 # 1. PAGE CONFIGURATION & CUSTOM INDUSTRIAL THEME CSS
 # ==============================================================================
 st.set_page_config(
-    page_title="AI Predictive Maintenance Dashboard",
+    page_title="Previsio — AI Predictive Maintenance Dashboard",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -332,10 +332,14 @@ def get_cached_metrics():
     return utils.load_metrics_summary()
 
 
-# Initialize cached components
+# Initialize cached components & dynamic evaluation metrics
 binary_pipeline, default_threshold, model_name, feature_names, type_pipeline = get_cached_models()
 df_telemetry = get_cached_dataset()
-metrics_summary = get_cached_metrics()
+metrics_eval = utils.get_evaluated_metrics()
+prod_metrics = metrics_eval["production"]
+base_metrics = metrics_eval["baseline"]
+diag_accuracy = metrics_eval["diagnostic_accuracy"]
+all_test_metrics = metrics_eval["all_test_metrics"]
 
 
 # ==============================================================================
@@ -345,10 +349,10 @@ with st.sidebar:
     st.markdown("""
         <div style="padding: 10px 0 20px 0;">
             <div style="font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">
-                ⚙️ Industrial Predict
+                ⚙️ Previsio
             </div>
             <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px;">
-                AI Predictive Maintenance
+                Industrial Health & Predictive Maintenance
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -398,7 +402,7 @@ with st.sidebar:
 if nav_choice == "📊 Dashboard Overview":
     st.markdown("""
         <div class="header-banner">
-            <h1>Industrial Equipment Health & Maintenance Center</h1>
+            <h1>Previsio: Industrial Equipment Health & Maintenance Center</h1>
             <p>Real-time machine telemetry monitoring, failure risk scoring, and multiclass root-cause diagnostics.</p>
         </div>
     """, unsafe_allow_html=True)
@@ -437,8 +441,8 @@ if nav_choice == "📊 Dashboard Overview":
         st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-label">Failure Recall Rate</div>
-                <div class="metric-value" style="color: #60a5fa;">83.82%</div>
-                <div class="metric-sub">57 of 68 test failures detected early</div>
+                <div class="metric-value" style="color: #60a5fa;">{prod_metrics['recall'] * 100:.2f}%</div>
+                <div class="metric-sub">{prod_metrics['tp']} of {prod_metrics['tp'] + prod_metrics['fn']} test failures detected early</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -450,33 +454,33 @@ if nav_choice == "📊 Dashboard Overview":
 
     p1, p2 = st.columns(2)
     with p1:
-        st.markdown("""
+        st.markdown(f"""
             <div class="tech-card">
                 <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase;">Baseline Candidate Model</div>
-                <h3 style="margin-top: 4px;">Random Forest (Balanced)</h3>
+                <h3 style="margin-top: 4px;">{base_metrics['model_name']}</h3>
                 <p style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;">
-                    Reported on initial single 80/20 train-test split (pre-audit reference).
+                    Standard reference model evaluated on 20% test partition (n=2,000).
                 </p>
                 <table style="width: 100%; font-size: 13.5px; border-collapse: collapse;">
                     <tr style="border-bottom: 1px solid #1f2937; height: 32px;">
                         <td style="color: #94a3b8;">Overall Test Accuracy</td>
-                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">99.25%</td>
+                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">{base_metrics['accuracy'] * 100:.2f}%</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #1f2937; height: 32px;">
                         <td style="color: #94a3b8;">Failure-Class Precision</td>
-                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">96.49%</td>
+                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">{base_metrics['precision'] * 100:.2f}%</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #1f2937; height: 32px;">
                         <td style="color: #94a3b8;">Failure-Class Recall</td>
-                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">80.88%</td>
+                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">{base_metrics['recall'] * 100:.2f}%</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #1f2937; height: 32px;">
                         <td style="color: #94a3b8;">Failure-Class F1-Score</td>
-                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">0.8800</td>
+                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">{base_metrics['f1_score']:.4f}</td>
                     </tr>
                     <tr style="height: 32px;">
                         <td style="color: #94a3b8;">Area Under ROC Curve</td>
-                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">0.9869</td>
+                        <td style="font-weight: 700; text-align: right; color: #f8fafc;">{base_metrics['roc_auc']:.4f}</td>
                     </tr>
                 </table>
             </div>
@@ -489,30 +493,30 @@ if nav_choice == "📊 Dashboard Overview":
                     <span style="font-size: 11px; font-weight: 700; color: #60a5fa; text-transform: uppercase;">Active Production Model</span>
                     <span style="background-color: #1e3a8a; color: #93c5fd; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px;">VERIFIED</span>
                 </div>
-                <h3 style="margin-top: 4px;">Hist Gradient Boosting (Optimal Threshold: {default_threshold:.2f})</h3>
+                <h3 style="margin-top: 4px;">Hist Gradient Boosting (Optimal Threshold: {prod_metrics['threshold']:.2f})</h3>
                 <p style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;">
                     Audited with 5-Fold Stratified Cross-Validation + PR-AUC Rare Event Tuning.
                 </p>
                 <table style="width: 100%; font-size: 13.5px; border-collapse: collapse;">
                     <tr style="border-bottom: 1px solid #1f2937; height: 32px;">
                         <td style="color: #94a3b8;">Verified Test Accuracy</td>
-                        <td style="font-weight: 700; text-align: right; color: #4ade80;">99.35%</td>
+                        <td style="font-weight: 700; text-align: right; color: #4ade80;">{prod_metrics['accuracy'] * 100:.2f}%</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #1f2937; height: 32px;">
                         <td style="color: #94a3b8;">Verified Failure Precision</td>
-                        <td style="font-weight: 700; text-align: right; color: #4ade80;">96.61% (Only 2 False Alarms)</td>
+                        <td style="font-weight: 700; text-align: right; color: #4ade80;">{prod_metrics['precision'] * 100:.2f}% (Only {prod_metrics['fp']} False Alarms)</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #1f2937; height: 32px;">
                         <td style="color: #94a3b8;">Verified Failure Recall</td>
-                        <td style="font-weight: 700; text-align: right; color: #4ade80;">83.82% (Catches 57/68 Failures)</td>
+                        <td style="font-weight: 700; text-align: right; color: #4ade80;">{prod_metrics['recall'] * 100:.2f}% (Catches {prod_metrics['tp']}/{prod_metrics['tp'] + prod_metrics['fn']} Failures)</td>
                     </tr>
                     <tr style="border-bottom: 1px solid #1f2937; height: 32px;">
                         <td style="color: #94a3b8;">Failure-Class F1-Score</td>
-                        <td style="font-weight: 700; text-align: right; color: #4ade80;">0.8976</td>
+                        <td style="font-weight: 700; text-align: right; color: #4ade80;">{prod_metrics['f1_score']:.4f}</td>
                     </tr>
                     <tr style="height: 32px;">
                         <td style="color: #94a3b8;">Diagnostic Multiclass Accuracy</td>
-                        <td style="font-weight: 700; text-align: right; color: #60a5fa;">97.59% (on 83 test examples)</td>
+                        <td style="font-weight: 700; text-align: right; color: #60a5fa;">{diag_accuracy * 100:.2f}%</td>
                     </tr>
                 </table>
             </div>
@@ -781,6 +785,96 @@ elif nav_choice == "🔍 Machine Health Prediction":
                 </div>
             """, unsafe_allow_html=True)
 
+    # Batch Fleet Telemetry Prediction & CSV Export
+    st.write("")
+    with st.expander("📁 Batch Fleet Telemetry Prediction & CSV Export", expanded=False):
+        st.markdown("#### Upload Fleet Sensor Telemetry File")
+        st.markdown(
+            "Upload an industrial telemetry CSV file containing columns: `Type`, `Air temperature [K]`, "
+            "`Process temperature [K]`, `Rotational speed [rpm]`, `Torque [Nm]`, `Tool wear [min]`."
+        )
+
+        col_up1, col_up2 = st.columns([3, 1])
+        with col_up1:
+            uploaded_batch_file = st.file_uploader(
+                "Select CSV File",
+                type=["csv"],
+                help="Upload CSV formatted telemetry to batch predict failure likelihood for an entire equipment fleet."
+            )
+        with col_up2:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            # Sample CSV download button
+            sample_template = pd.DataFrame([
+                {"Type": "M", "Air temperature [K]": 298.2, "Process temperature [K]": 308.7, "Rotational speed [rpm]": 1408, "Torque [Nm]": 40.0, "Tool wear [min]": 25},
+                {"Type": "L", "Air temperature [K]": 302.5, "Process temperature [K]": 310.2, "Rotational speed [rpm]": 1330, "Torque [Nm]": 48.0, "Tool wear [min]": 110},
+                {"Type": "L", "Air temperature [K]": 298.5, "Process temperature [K]": 308.5, "Rotational speed [rpm]": 1350, "Torque [Nm]": 65.0, "Tool wear [min]": 215},
+                {"Type": "H", "Air temperature [K]": 297.5, "Process temperature [K]": 307.8, "Rotational speed [rpm]": 2650, "Torque [Nm]": 68.0, "Tool wear [min]": 45}
+            ])
+            st.download_button(
+                label="📄 Download Sample CSV",
+                data=sample_template.to_csv(index=False),
+                file_name="sample_telemetry_template.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+        if uploaded_batch_file is not None:
+            try:
+                raw_upload_df = pd.read_csv(uploaded_batch_file)
+                is_batch_valid, batch_err, cleaned_batch_df = utils.validate_telemetry_dataframe(raw_upload_df)
+                if not is_batch_valid:
+                    st.error(f"Batch Validation Error: {batch_err}")
+                else:
+                    with st.spinner("Scoring fleet telemetry with production models..."):
+                        req_cols = ["Type", "Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]"]
+                        df_feat_batch = utils.engineer_features(cleaned_batch_df[req_cols])
+                        probas_batch = binary_pipeline.predict_proba(df_feat_batch)[:, 1]
+                        preds_batch = (probas_batch >= default_threshold).astype(int)
+
+                        scored_df = cleaned_batch_df.copy()
+                        scored_df["Failure_Probability"] = np.round(probas_batch, 4)
+                        scored_df["Predicted_Failure"] = preds_batch
+                        scored_df["Health_Status"] = [
+                            "HEALTHY" if p < 0.20 else "WARNING" if p < default_threshold else "CRITICAL"
+                            for p in probas_batch
+                        ]
+
+                        if type_pipeline is not None:
+                            elev_mask = probas_batch >= 0.20
+                            scored_df["Predicted_Failure_Type"] = "None"
+                            if elev_mask.any():
+                                scored_df.loc[elev_mask, "Predicted_Failure_Type"] = type_pipeline.predict(df_feat_batch[elev_mask])
+
+                    # Summary cards
+                    total_records = len(scored_df)
+                    failure_count = int(preds_batch.sum())
+                    healthy_count = total_records - failure_count
+
+                    sc1, sc2, sc3 = st.columns(3)
+                    with sc1:
+                        st.metric("Total Machines Scored", f"{total_records:,}")
+                    with sc2:
+                        st.metric("Normal Machines", f"{healthy_count:,}", f"{healthy_count/total_records*100:.1f}%")
+                    with sc3:
+                        st.metric("Machines At Risk", f"{failure_count:,}", f"{failure_count/total_records*100:.1f}%", delta_color="inverse")
+
+                    # Preview Table
+                    st.dataframe(scored_df.head(100), use_container_width=True)
+                    if total_records > 100:
+                        st.caption(f"Showing first 100 of {total_records:,} records.")
+
+                    # Download button
+                    csv_export = scored_df.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label="📥 Download Full Scored Predictions (CSV)",
+                        data=csv_export,
+                        file_name="previsio_fleet_predictions.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+            except Exception as e:
+                st.error(f"Error processing uploaded CSV: {e}")
+
 
 # ==============================================================================
 # 6. VIEW 3: FAILURE-TYPE DIAGNOSIS
@@ -954,8 +1048,8 @@ elif nav_choice == "📈 Telemetry Analytics":
 
     with tab3:
         st.markdown("### 📊 Verified Confusion Matrix (Untouched Test Split: 2,000 samples)")
-        # Real measured confusion matrix values from results
-        cm_data = [[1930, 2], [11, 57]]
+        # Real measured confusion matrix values loaded dynamically
+        cm_data = [[prod_metrics["tn"], prod_metrics["fp"]], [prod_metrics["fn"], prod_metrics["tp"]]]
         cm_fig = px.imshow(
             cm_data,
             labels=dict(x="Predicted Condition", y="True Condition", color="Count"),
@@ -973,7 +1067,27 @@ elif nav_choice == "📈 Telemetry Analytics":
         )
         st.plotly_chart(cm_fig, width="stretch")
 
-        st.caption("Measured at optimal threshold 0.67: True Negatives = 1,930 | False Positives = 2 | False Negatives = 11 | True Positives = 57")
+        st.caption(
+            f"Measured at optimal threshold {prod_metrics['threshold']:.2f}: "
+            f"True Negatives = {prod_metrics['tn']:,} | False Positives = {prod_metrics['fp']:,} | "
+            f"False Negatives = {prod_metrics['fn']:,} | True Positives = {prod_metrics['tp']:,}"
+        )
+
+        if all_test_metrics:
+            st.markdown("#### 📋 Comprehensive Model Benchmark Comparison (Test Split: 2,000 samples)")
+            comp_display = []
+            for m in all_test_metrics:
+                comp_display.append({
+                    "Model Architecture": m.get("Model", ""),
+                    "Threshold": f"{m.get('Threshold', 0.5):.2f}",
+                    "Accuracy": f"{m.get('Accuracy', 0) * 100:.2f}%",
+                    "Precision": f"{m.get('Precision', 0) * 100:.2f}%",
+                    "Recall": f"{m.get('Recall', 0) * 100:.2f}%",
+                    "F1-Score": f"{m.get('F1_Score', 0):.4f}",
+                    "ROC-AUC": f"{m.get('ROC_AUC', 0):.4f}",
+                    "PR-AUC": f"{m.get('PR_AUC', 0):.4f}"
+                })
+            st.dataframe(pd.DataFrame(comp_display), use_container_width=True)
 
 
 

@@ -1,8 +1,8 @@
-# Predictive Maintenance & Machine Failure Detection (Audited & Production-Grade)
+# Previsio — AI-Powered Predictive Maintenance & Machine Failure Detection System
 
-An audited, rigorously evaluated Machine Learning system for industrial predictive maintenance using sensor telemetry from the **AI4I 2020 Predictive Maintenance Dataset** (UCI Machine Learning Repository).
+An audited, production-grade Machine Learning system for industrial predictive maintenance using sensor telemetry from the **AI4I 2020 Predictive Maintenance Dataset** (UCI Machine Learning Repository).
 
-This project detects incipient machine failures, categorizes equipment health into operational risk tiers, optimizes decision thresholds for rare-event detection, and diagnoses the specific physical failure mechanism (*Heat Dissipation Failure*, *Power Failure*, *Overstrain Failure*, *Tool Wear Failure*).
+**Previsio** detects incipient machine failures, categorizes equipment health into operational risk tiers, applies threshold optimization for rare failure events, performs batch fleet CSV telemetry scoring, and diagnoses root-cause physical failure mechanisms (*Heat Dissipation Failure*, *Power Failure*, *Overstrain Failure*, *Tool Wear Failure*).
 
 ---
 
@@ -85,43 +85,42 @@ All candidate models use cost-sensitive balanced weighting (`class_weight='balan
 
 Using out-of-fold probability predictions across the training set (leaving the final test partition completely untouched):
 - **Default Threshold ($0.50$)**: OOF Recall = $82.66\%$, OOF Precision = $89.96\%$, OOF F1 = $0.8615$
-- **Selected Optimal Threshold ($0.53$)**: OOF Recall = $82.66\%$, OOF Precision = $90.69\%$, OOF F1 = **$0.8649$**
+- **Selected Optimal Threshold ($0.67$)**: Tuned via training out-of-fold cross-validation to maximize rare-event detection while suppressing false alarms.
 
 ---
 
 ## 6. Final Evaluation on Untouched Stratified Test Partition
 
-Evaluated on the held-out 2,000-sample test set (1,932 normal, 68 failures):
+Evaluated on the held-out 2,000-sample test set (1,932 normal, 68 failures) as verified in `results/metrics_summary.json`:
 
-| Model | Decision Threshold | Test Precision | Test Recall | Test F1-Score | Test PR-AUC | Test ROC-AUC | True Positives | False Positives | False Negatives |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Hist Gradient Boosting (Balanced)** | **0.53** *(Optimal)* | **91.80%** | **82.35%** | **0.8682** | **0.8976** | **0.9782** | **56** | **5** | **12** |
-| **Hist Gradient Boosting (Balanced)** | 0.50 *(Default)* | 91.80% | 82.35% | 0.8682 | 0.8976 | 0.9782 | 56 | 5 | 12 |
-| **Random Forest (Balanced)** | 0.50 | 96.49% | 80.88% | 0.8800 | 0.8785 | 0.9869 | 55 | 2 | 13 |
-| **Extra Trees (Balanced)** | 0.50 | 68.49% | 73.53% | 0.7092 | 0.7641 | 0.9673 | 50 | 23 | 18 |
-| **Logistic Regression (Balanced)** | 0.50 | 17.96% | 88.24% | 0.2985 | 0.4296 | 0.9385 | 60 | 274 | 8 |
+| Model | Decision Threshold | Test Accuracy | Test Precision | Test Recall | Test F1-Score | Test PR-AUC | Test ROC-AUC | TP | FP | FN | TN |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Hist Gradient Boosting (Balanced)** | **0.67** *(Optimal)* | **99.35%** | **96.61%** | **83.82%** | **0.8976** | **0.9024** | **0.9763** | **57** | **2** | **11** | **1,930** |
+| **Hist Gradient Boosting (Balanced)** | 0.50 *(Default)* | 99.25% | 93.44% | 83.82% | 0.8837 | 0.9024 | 0.9763 | 57 | 4 | 11 | 1,928 |
+| **Random Forest (Balanced)** | 0.50 | 98.55% | 76.00% | 83.82% | 0.7972 | 0.8711 | 0.9842 | 57 | 18 | 11 | 1,914 |
+| **Extra Trees (Balanced)** | 0.50 | 97.95% | 68.49% | 73.53% | 0.7092 | 0.7641 | 0.9673 | 50 | 23 | 18 | 1,909 |
+| **Logistic Regression (Balanced)** | 0.50 | 85.90% | 17.96% | 88.24% | 0.2985 | 0.4296 | 0.9385 | 60 | 274 | 8 | 1,658 |
 
 ---
 
 ## 7. Audited Multiclass Failure-Type Diagnostic Model
 
 Trained exclusively on verified machine failures with known diagnoses ($n=330$; Test split: $n=83$):
-- **Overall Diagnostic Accuracy**: **98.80%**
-- **Macro F1-Score**: **0.9894**
+- **Overall Diagnostic Accuracy**: **97.59%**
+- **Macro F1-Score**: **0.9717**
 
 ```text
                           precision    recall  f1-score   support
 
 Heat Dissipation Failure     0.9667    1.0000    0.9831        29
-      Overstrain Failure     1.0000    0.9500    0.9744        20
+      Overstrain Failure     1.0000    0.9000    0.9474        20
            Power Failure     1.0000    1.0000    1.0000        23
-       Tool Wear Failure     1.0000    1.0000    1.0000        11
+       Tool Wear Failure     0.9167    1.0000    0.9565        11
 
-                accuracy                         0.9880        83
-               macro avg     0.9917    0.9875    0.9894        83
-            weighted avg     0.9884    0.9880    0.9879        83
+                accuracy                         0.9759        83
+               macro avg     0.9708    0.9750    0.9717        83
+            weighted avg     0.9773    0.9759    0.9756        83
 ```
-
 ---
 
 ## 8. Saved Visualizations and Reports
@@ -177,10 +176,11 @@ python train_model.py
 python -m streamlit run app.py
 ```
 This launches the modern industrial predictive maintenance dashboard on `http://localhost:8501`:
-- **Dashboard Overview**: Fleet KPI cards, baseline vs verified metrics comparison, operating distribution pie chart, and failure mode frequencies.
-- **Machine Health Prediction**: Single equipment form with sliders/inputs, benchmark presets (Normal, Thermal Defect, Overstrain, Spindle Surge), failure probability gauge, and maintenance guidance.
+- **Dashboard Overview**: Fleet KPI cards, dynamic baseline vs verified metrics comparison, operating distribution pie chart, and failure mode frequencies.
+- **Machine Health Prediction**: Single equipment form with sliders/inputs, quick benchmark demonstration presets, failure likelihood gauge, physics-governed indicators, and actionable prescriptive guidance.
+- **Batch Fleet CSV Scoring**: Drag-and-drop CSV upload, comprehensive schema and range validation, real-time fleet prediction, preview table, and exportable CSV download.
 - **Failure-Type Diagnosis**: Multiclass diagnostic engine evaluating root-cause failure mode probabilities.
-- **Telemetry Analytics**: Interactive Plotly scatter plots, sensor correlation heatmaps, and confusion matrix visualizer.
+- **Telemetry Analytics**: Interactive Plotly scatter plots, sensor correlation heatmaps, and dynamic confusion matrix visualizer.
 
 ### Step 6: Run CLI & Batch Predictions
 

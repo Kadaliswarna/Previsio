@@ -76,13 +76,115 @@ def load_failure_type_model():
 
 
 def load_metrics_summary():
-    """Loads saved metrics summary JSON from training evaluation."""
+    """Loads saved metrics summary JSON from training evaluation with safe error handling."""
     base_dir = get_base_dir()
     json_path = os.path.join(base_dir, "results", "metrics_summary.json")
     if os.path.exists(json_path):
-        with open(json_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
     return {}
+
+
+def get_evaluated_metrics():
+    """
+    Dynamically extracts model evaluation metrics and confusion matrix values
+    from 'results/metrics_summary.json'. Falls back safely to verified audited
+    benchmarks if the file is missing or corrupted.
+    """
+    raw_summary = load_metrics_summary()
+    is_loaded = bool(raw_summary and "test_metrics" in raw_summary)
+
+    # Audited fallback defaults
+    prod_metrics = {
+        "model_name": "Hist Gradient Boosting (Balanced) [Optimized Threshold]",
+        "threshold": 0.67,
+        "accuracy": 0.9935,
+        "precision": 0.9661,
+        "recall": 0.8382,
+        "f1_score": 0.8976,
+        "roc_auc": 0.9763,
+        "pr_auc": 0.9024,
+        "tn": 1930,
+        "fp": 2,
+        "fn": 11,
+        "tp": 57
+    }
+
+    base_metrics = {
+        "model_name": "Random Forest (Balanced)",
+        "threshold": 0.50,
+        "accuracy": 0.9855,
+        "precision": 0.7600,
+        "recall": 0.8382,
+        "f1_score": 0.7972,
+        "roc_auc": 0.9842,
+        "pr_auc": 0.8711
+    }
+
+    diag_accuracy = 0.9759
+    all_test_metrics = []
+
+    if is_loaded:
+        test_list = raw_summary.get("test_metrics", [])
+        all_test_metrics = test_list
+        diag_accuracy = float(raw_summary.get("diagnostic_accuracy", 0.9759))
+        sel_threshold = float(raw_summary.get("selected_threshold", 0.67))
+
+        # 1. Locate the active production model entry
+        prod_entry = None
+        for item in test_list:
+            if "Optimized Threshold" in item.get("Model", "") or abs(item.get("Threshold", 0.0) - sel_threshold) < 0.01:
+                prod_entry = item
+                break
+        if prod_entry is None and test_list:
+            prod_entry = test_list[-1]
+
+        if prod_entry:
+            prod_metrics = {
+                "model_name": str(prod_entry.get("Model", prod_metrics["model_name"])),
+                "threshold": float(prod_entry.get("Threshold", sel_threshold)),
+                "accuracy": float(prod_entry.get("Accuracy", prod_metrics["accuracy"])),
+                "precision": float(prod_entry.get("Precision", prod_metrics["precision"])),
+                "recall": float(prod_entry.get("Recall", prod_metrics["recall"])),
+                "f1_score": float(prod_entry.get("F1_Score", prod_metrics["f1_score"])),
+                "roc_auc": float(prod_entry.get("ROC_AUC", prod_metrics["roc_auc"])),
+                "pr_auc": float(prod_entry.get("PR_AUC", prod_metrics["pr_auc"])),
+                "tn": int(prod_entry.get("TN", prod_metrics["tn"])),
+                "fp": int(prod_entry.get("FP", prod_metrics["fp"])),
+                "fn": int(prod_entry.get("FN", prod_metrics["fn"])),
+                "tp": int(prod_entry.get("TP", prod_metrics["tp"]))
+            }
+
+        # 2. Locate the baseline candidate model entry
+        base_entry = None
+        for item in test_list:
+            if "Random Forest" in item.get("Model", ""):
+                base_entry = item
+                break
+
+        if base_entry:
+            base_metrics = {
+                "model_name": str(base_entry.get("Model", base_metrics["model_name"])),
+                "threshold": float(base_entry.get("Threshold", 0.50)),
+                "accuracy": float(base_entry.get("Accuracy", base_metrics["accuracy"])),
+                "precision": float(base_entry.get("Precision", base_metrics["precision"])),
+                "recall": float(base_entry.get("Recall", base_metrics["recall"])),
+                "f1_score": float(base_entry.get("F1_Score", base_metrics["f1_score"])),
+                "roc_auc": float(base_entry.get("ROC_AUC", base_metrics["roc_auc"])),
+                "pr_auc": float(base_entry.get("PR_AUC", base_metrics["pr_auc"]))
+            }
+
+    return {
+        "is_loaded": is_loaded,
+        "source": "results/metrics_summary.json" if is_loaded else "audited_fallback",
+        "production": prod_metrics,
+        "baseline": base_metrics,
+        "diagnostic_accuracy": diag_accuracy,
+        "all_test_metrics": all_test_metrics
+    }
 
 
 def engineer_features(df):
@@ -94,53 +196,160 @@ def engineer_features(df):
     """
     df_feat = df.copy()
     df_feat["Temp_diff"] = df_feat["Process temperature [K]"] - df_feat["Air temperature [K]"]
-    df_feat["Power_kW"] = (df_feat["Torque [Nm]"] * df_feat["Rotational speed [rpm]"] * 2 * np.pi) / 60000.0
+    df_feat["Power_kW"] = (df_feat["Torque [Nm]"] * df_feat["Rotational speed [rpm]"] * 2.0 * np.pi) / 60000.0
     df_feat["Tool_wear_Torque"] = df_feat["Tool wear [min]"] * df_feat["Torque [Nm]"]
     return df_feat
 
 
 def validate_telemetry(machine_type, air_temp, process_temp, speed, torque, tool_wear):
     """
-    Validates sensor values against realistic physical operational ranges.
+    Validates single-machine sensor values against realistic physical operational ranges.
+    Guards against missing, null, NaN, infinite, and out-of-bounds inputs.
     Returns (is_valid: bool, error_msg: str, validated_dict: dict)
     """
-    machine_type = str(machine_type).strip().upper()
-    if machine_type not in ["L", "M", "H"]:
-        return False, f"Machine type '{machine_type}' must be one of: 'L' (Low), 'M' (Medium), 'H' (High Quality Variant).", {}
+    # 1. Null / None / Empty check
+    raw_vals = [machine_type, air_temp, process_temp, speed, torque, tool_wear]
+    if any(v is None or (isinstance(v, str) and not v.strip()) for v in raw_vals):
+        return False, "Input Validation Error: All 6 sensor parameters are required and cannot be empty.", {}
 
+    # 2. Machine type validation
+    machine_type_str = str(machine_type).strip().upper()
+    if machine_type_str not in ["L", "M", "H"]:
+        return False, f"Machine type '{machine_type}' must be one of: 'L' (Low), 'M' (Medium), or 'H' (High Quality Variant).", {}
+
+    # 3. Numeric type conversion and NaN / Inf checks
     try:
-        air_temp = float(air_temp)
-        process_temp = float(process_temp)
-        speed = float(speed)
-        torque = float(torque)
-        tool_wear = float(tool_wear)
+        air_val = float(air_temp)
+        proc_val = float(process_temp)
+        speed_val = float(speed)
+        torque_val = float(torque)
+        wear_val = float(tool_wear)
     except (ValueError, TypeError) as e:
-        return False, f"Telemetry readings must be numeric numbers. Detail: {e}", {}
+        return False, f"Telemetry readings must be valid numeric values. Detail: {e}", {}
 
-    if air_temp < 250.0 or air_temp > 350.0:
-        return False, f"Air temperature ({air_temp:.1f} K) is outside realistic factory room limits (250 K to 350 K / -23°C to 77°C).", {}
+    numeric_vals = [("Air Temperature", air_val), ("Process Temperature", proc_val),
+                    ("Rotational Speed", speed_val), ("Torque", torque_val), ("Tool Wear", wear_val)]
 
-    if process_temp < 250.0 or process_temp > 370.0:
-        return False, f"Process temperature ({process_temp:.1f} K) is outside realistic cutting chamber limits (250 K to 370 K).", {}
+    for name, val in numeric_vals:
+        if np.isnan(val):
+            return False, f"Invalid Reading: {name} cannot be NaN (Not a Number).", {}
+        if np.isinf(val):
+            return False, f"Invalid Reading: {name} cannot be Infinite (+Inf / -Inf).", {}
 
-    if speed <= 0 or speed > 6000:
-        return False, f"Rotational speed ({speed:.0f} RPM) must be positive and within spindle rating (1 to 6,000 RPM).", {}
+    # 4. Realistic physical bounds verification
+    if air_val < 250.0 or air_val > 350.0:
+        return False, f"Air temperature ({air_val:.1f} K) is outside realistic factory room limits (250.0 K to 350.0 K / -23°C to 77°C).", {}
 
-    if torque < 0 or torque > 300:
-        return False, f"Torque ({torque:.1f} Nm) must be non-negative and within spindle limits (0 to 300 Nm).", {}
+    if proc_val < 250.0 or proc_val > 370.0:
+        return False, f"Process temperature ({proc_val:.1f} K) is outside realistic cutting chamber limits (250.0 K to 370.0 K / -23°C to 97°C).", {}
 
-    if tool_wear < 0 or tool_wear > 600:
-        return False, f"Tool wear ({tool_wear:.0f} min) must be non-negative (0 to 600 minutes).", {}
+    if speed_val <= 0 or speed_val > 6000:
+        return False, f"Rotational speed ({speed_val:.0f} RPM) must be positive and within spindle limits (1 to 6,000 RPM).", {}
+
+    if torque_val < 0.0 or torque_val > 300.0:
+        return False, f"Applied torque ({torque_val:.1f} Nm) must be non-negative and within spindle limits (0.0 to 300.0 Nm).", {}
+
+    if wear_val < 0.0 or wear_val > 600.0:
+        return False, f"Tool wear duration ({wear_val:.0f} min) must be non-negative (0 to 600 minutes).", {}
 
     validated_dict = {
-        "Type": machine_type,
-        "Air temperature [K]": air_temp,
-        "Process temperature [K]": process_temp,
-        "Rotational speed [rpm]": speed,
-        "Torque [Nm]": torque,
-        "Tool wear [min]": tool_wear
+        "Type": machine_type_str,
+        "Air temperature [K]": air_val,
+        "Process temperature [K]": proc_val,
+        "Rotational speed [rpm]": speed_val,
+        "Torque [Nm]": torque_val,
+        "Tool wear [min]": wear_val
     }
     return True, "", validated_dict
+
+
+def validate_telemetry_dataframe(df):
+    """
+    Validates a batch telemetry DataFrame (e.g., from CSV uploads or CLI batch runs).
+    Guards against empty dataframes, missing columns, NaNs, infinities, invalid data types,
+    and out-of-range sensor values.
+    Returns (is_valid: bool, error_msg: str, cleaned_df: pd.DataFrame)
+    """
+    if df is None or not isinstance(df, pd.DataFrame):
+        return False, "Input is not a valid pandas DataFrame.", pd.DataFrame()
+
+    if df.empty or len(df) == 0:
+        return False, "Uploaded CSV file is completely empty. Please upload a file containing sensor telemetry records.", pd.DataFrame()
+
+    # Standard expected columns
+    standard_cols = {
+        "type": "Type",
+        "air temperature [k]": "Air temperature [K]",
+        "process temperature [k]": "Process temperature [K]",
+        "rotational speed [rpm]": "Rotational speed [rpm]",
+        "torque [nm]": "Torque [Nm]",
+        "tool wear [min]": "Tool wear [min]"
+    }
+
+    # Map input columns flexibly
+    col_map = {}
+    for col in df.columns:
+        norm = str(col).strip().lower()
+        if norm in standard_cols:
+            col_map[col] = standard_cols[norm]
+
+    # Check for missing required columns
+    matched_targets = set(col_map.values())
+    expected_targets = set(standard_cols.values())
+    missing_targets = expected_targets - matched_targets
+    if missing_targets:
+        missing_fmt = ", ".join(f"'{m}'" for m in sorted(missing_targets))
+        return False, f"CSV is missing required sensor columns: {missing_fmt}.", pd.DataFrame()
+
+    df_clean = df.rename(columns=col_map).copy()
+    req_list = ["Type", "Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]"]
+    df_eval = df_clean[req_list].copy()
+
+    # Check for missing or NaN values
+    null_counts = df_eval.isnull().sum()
+    if null_counts.any():
+        bad_cols = [f"'{col}' ({count} missing)" for col, count in null_counts.items() if count > 0]
+        return False, f"CSV contains missing or NaN values in: {', '.join(bad_cols)}.", pd.DataFrame()
+
+    # Check machine type values
+    df_eval["Type"] = df_eval["Type"].astype(str).str.strip().str.upper()
+    invalid_types = ~df_eval["Type"].isin(["L", "M", "H"])
+    if invalid_types.any():
+        bad_count = invalid_types.sum()
+        return False, f"Found {bad_count} row(s) with invalid Machine Type. Must be 'L', 'M', or 'H'.", pd.DataFrame()
+
+    # Convert numeric fields and check infinities
+    numeric_cols = ["Air temperature [K]", "Process temperature [K]", "Rotational speed [rpm]", "Torque [Nm]", "Tool wear [min]"]
+    for col in numeric_cols:
+        try:
+            df_eval[col] = pd.to_numeric(df_eval[col], errors="raise")
+        except Exception:
+            return False, f"Column '{col}' contains non-numeric or corrupt entries.", pd.DataFrame()
+
+        if np.isinf(df_eval[col]).any():
+            return False, f"Column '{col}' contains Infinite (+Inf / -Inf) values.", pd.DataFrame()
+
+    # Physical range boundaries
+    bounds = {
+        "Air temperature [K]": (250.0, 350.0, "factory ambient range 250 - 350 K"),
+        "Process temperature [K]": (250.0, 370.0, "cutting chamber range 250 - 370 K"),
+        "Rotational speed [rpm]": (1.0, 6000.0, "spindle rating 1 - 6,000 RPM"),
+        "Torque [Nm]": (0.0, 300.0, "spindle rating 0 - 300 Nm"),
+        "Tool wear [min]": (0.0, 600.0, "blade life 0 - 600 min")
+    }
+
+    for col, (min_val, max_val, desc) in bounds.items():
+        out_of_bounds = (df_eval[col] < min_val) | (df_eval[col] > max_val)
+        if out_of_bounds.any():
+            bad_count = out_of_bounds.sum()
+            sample_val = df_eval.loc[out_of_bounds, col].iloc[0]
+            return False, f"Found {bad_count} row(s) where '{col}' is outside {desc} (e.g. value {sample_val}).", pd.DataFrame()
+
+    # Merge cleaned fields back into original structure preserving optional extra columns (like UDI, Product ID)
+    for col in req_list:
+        df_clean[col] = df_eval[col]
+
+    return True, "", df_clean
 
 
 def predict_machine_health(sensor_dict, binary_pipeline, threshold=0.67):
